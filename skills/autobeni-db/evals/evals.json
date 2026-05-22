@@ -1,0 +1,23 @@
+{
+  "skill_name": "autobeni-db-manager",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我看看黑色的竞品有哪些，按价格从低到高排列",
+      "expected_output": "返回黑色(BK)竞品列表，包含ASIN、品牌、价格信息，按价格升序排列",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "各品牌的竞品数量和平均价格是多少？",
+      "expected_output": "返回按品牌分组的统计数据：品牌名、竞品数量、最低价、最高价、平均价",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "添加一个竞品：ASIN是B0TEST001，品牌是AKMOTOR，颜色是黑色BK，价格是29.99美元",
+      "expected_output": "成功插入数据，返回确认信息",
+      "files": []
+    }
+  ]
+}
