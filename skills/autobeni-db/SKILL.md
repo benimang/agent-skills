@@ -7,6 +7,13 @@ description: 当用户提到 autobeni 数据库、竞品监控、亚马逊汽车
 
 管理 autobeni.db SQLite 数据库的技能，用于竞品监控数据的查询和更新。
 
+## 运行环境
+
+**操作系统**: Windows
+**Shell**: PowerShell 5.1
+**数据库**: SQLite（通过 Python sqlite3 模块访问）
+**数据库路径**: `autobeni.db`（当前工作目录下）
+
 ## 数据库信息
 
 **路径**: `autobeni.db`
