@@ -14,6 +14,73 @@ description: 当用户提到 autobeni 数据库、竞品监控、亚马逊汽车
 **数据库**: SQLite（通过 Python sqlite3 模块访问）
 **数据库路径**: `autobeni.db`（当前工作目录下）
 
+## 执行策略
+
+**强制使用 Python 脚本执行所有数据库操作**。禁止通过 sqlite3 CLI 在 shell 中直接执行 SQL。
+
+### 操作流程
+
+1. **生成脚本**：将 SQL 操作写入临时 Python 脚本，存放在 `.py/` 目录下
+2. **执行脚本**：通过 `python .py/<script_name>.py [args]` 执行
+3. **展示结果**：读取脚本输出并格式化展示给用户
+
+### 脚本目录
+
+```
+C:\projects\autobeni\.py\    # 临时脚本存放目录（执行时自动创建）
+```
+
+### 执行示例
+
+```python
+# .py/query_all.py
+import sqlite3, sys, os
+
+db_path = os.path.join(os.path.dirname(__file__), '..', 'autobeni.db')
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+cursor.execute("""
+    SELECT pm.id, pm.asin, b.name AS brand, c.name AS color,
+           col.name AS collection, pm.price, pm.datetime
+    FROM product_match pm
+    JOIN brand b ON pm.brand_id = b.id
+    JOIN color c ON pm.color_id = c.id
+    JOIN collection col ON pm.collection_id = col.id
+    ORDER BY pm.id
+""")
+results = cursor.fetchall()
+conn.close()
+
+for row in results:
+    print(row)
+```
+
+```powershell
+# 执行命令
+python .py/query_all.py
+```
+
+### 参数传递
+
+脚本通过 `sys.argv[1:]` 接收查询条件：
+
+```python
+# .py/query_by_color.py
+import sys
+color = sys.argv[1] if len(sys.argv) > 1 else 'BK'
+```
+
+```powershell
+python .py/query_by_color.py BK
+```
+
+### 禁止事项
+
+- **禁止**在 PowerShell 中直接运行 `sqlite3 autobeni.db "SELECT ..."`
+- **禁止**在 bash/powershell 中直接执行多行 SQL 语句
+- 所有数据库操作必须通过 Python 脚本执行
+
 ## 数据库信息
 
 **路径**: `autobeni.db`
@@ -75,13 +142,17 @@ description: 当用户提到 autobeni 数据库、竞品监控、亚马逊汽车
 
 ## 连接数据库
 
-```python
-import sqlite3
+所有脚本使用以下连接方式：
 
-db_path = 'autobeni.db'
+```python
+import sqlite3, os
+
+db_path = os.path.join(os.path.dirname(__file__), '..', 'autobeni.db')
 conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 ```
+
+> 注意：临时脚本存放在 `.py/` 目录，因此使用 `os.path.dirname(__file__)` 配合 `'..'` 定位到项目根目录的 `autobeni.db`
 
 ## 查询操作
 
@@ -93,6 +164,7 @@ JOIN brand b ON pm.brand_id = b.id
 JOIN color c ON pm.color_id = c.id
 ORDER BY pm.id;
 ```
+<!-- 执行：python .py/query_all.py -->
 
 ### 按颜色筛选竞品
 ```sql
@@ -103,6 +175,7 @@ JOIN color c ON pm.color_id = c.id
 WHERE c.name = 'BK'
 ORDER BY pm.price;
 ```
+<!-- 执行：python .py/query_by_color.py BK -->
 
 ### 按品牌筛选竞品
 ```sql
@@ -113,18 +186,20 @@ JOIN color c ON pm.color_id = c.id
 WHERE b.name = 'AKMOTOR'
 ORDER BY pm.price;
 ```
+<!-- 执行：python .py/query_by_brand.py AKMOTOR -->
 
 ### 价格统计（按品牌）
 ```sql
-SELECT b.name AS brand, COUNT(*) AS count, 
-       MIN(pm.price) AS min_price, 
-       MAX(pm.price) AS max_price, 
+SELECT b.name AS brand, COUNT(*) AS count,
+       MIN(pm.price) AS min_price,
+       MAX(pm.price) AS max_price,
        ROUND(AVG(pm.price), 2) AS avg_price
 FROM product_match pm
 JOIN brand b ON pm.brand_id = b.id
 GROUP BY pm.brand_id
 ORDER BY avg_price DESC;
 ```
+<!-- 执行：python .py/stats_by_brand.py -->
 
 ### 价格统计（按颜色）
 ```sql
@@ -137,6 +212,7 @@ JOIN color c ON pm.color_id = c.id
 GROUP BY pm.color_id
 ORDER BY count DESC;
 ```
+<!-- 执行：python .py/stats_by_color.py -->
 
 ### 查找特定ASIN
 ```sql
@@ -146,6 +222,7 @@ JOIN brand b ON pm.brand_id = b.id
 JOIN color c ON pm.color_id = c.id
 WHERE pm.asin = 'B0DFCLW3N4';
 ```
+<!-- 执行：python .py/query_by_asin.py B0DFCLW3N4 -->
 
 ### 价格区间筛选
 ```sql
@@ -156,6 +233,7 @@ JOIN color c ON pm.color_id = c.id
 WHERE pm.price BETWEEN 25 AND 35
 ORDER BY pm.price;
 ```
+<!-- 执行：python .py/query_by_price_range.py 25 35 -->
 
 ### 查找竞品（通过 ASIN/SKU，匹配 collection_id，默认全部颜色，按品牌+颜色排序）
 ```sql
@@ -169,6 +247,7 @@ WHERE pm.collection_id = (
 )
 ORDER BY b.name, c.name;
 ```
+<!-- 执行：python .py/query_competitors.py B0DFCLW3N4 -->
 
 ### 查找同色竞品（通过 ASIN/SKU，匹配 collection_id + color_id，按品牌+颜色排序）
 ```sql
@@ -185,6 +264,7 @@ AND pm.color_id = (
 )
 ORDER BY b.name, c.name;
 ```
+<!-- 执行：python .py/query_same_color.py B0DFCLW3N4 -->
 
 ## 插入操作
 
@@ -193,12 +273,38 @@ ORDER BY b.name, c.name;
 INSERT INTO product_match (asin, brand_id, color_id, collection_id, price, datetime)
 VALUES ('B0XXXXXXX', 3, 2, 1, 29.99, date('now'));
 ```
+<!-- 执行：python .py/insert_competitor.py B0XXXXXXX 3 2 1 29.99 -->
 
 ### 添加自有产品
 ```sql
 INSERT INTO product (asin, sku, brand_id, color_id, collection_id, price)
 VALUES ('B0XXXXXXX', 'SKU001', 1, 2, 1, 39.99);
 ```
+<!-- 执行：python .py/insert_product.py B0XXXXXXX SKU001 1 2 1 39.99 -->
+
+### 批量添加自有产品
+从 stdin 读取多行数据，每行包含 ASIN 和 SKU，自动解析 color_id 和 collection_id。
+
+**逻辑规则**：
+- `brand_id = 1`（固定）
+- `price = 99.99`（固定）
+- `color_id`：SKU 用 `-` 分割后取最后一个字符串作为颜色代码，查 color 表，不存在则自动创建
+- `collection_id`：SKU 去掉最后一个 `-` 及后面内容，查 collection 表，不存在则自动创建
+
+**输入格式**：每行 `ASIN SKU`，空格分隔
+
+```bash
+# 方式1：管道输入
+"B0DFCLW3N4 SKU-001-BK`nB0AAA11111 SKU-002-BK" | python .py/add_own_product.py
+
+# 方式2：heredoc
+python .py/add_own_product.py <<EOF
+B0DFCLW3N4 SKU-001-BK
+B0AAA11111 SKU-002-BK
+EOF
+```
+
+**示例**：SKU `SKU-001-BK` → color_code = `BK`，collection_name = `SKU-001`
 
 ## 更新操作
 
@@ -206,11 +312,13 @@ VALUES ('B0XXXXXXX', 'SKU001', 1, 2, 1, 39.99);
 ```sql
 UPDATE product_match SET price = 29.99 WHERE id = 5;
 ```
+<!-- 执行：python .py/update_price.py 5 29.99 -->
 
 ### 更新竞品ASIN
 ```sql
 UPDATE product_match SET asin = 'B0YYYYYYY' WHERE id = 5;
 ```
+<!-- 执行：python .py/update_asin.py 5 B0YYYYYYY -->
 
 ## 删除操作
 
@@ -218,11 +326,13 @@ UPDATE product_match SET asin = 'B0YYYYYYY' WHERE id = 5;
 ```sql
 DELETE FROM product_match WHERE id = 5;
 ```
+<!-- 执行：python .py/delete_competitor.py 5 -->
 
 ### 删除特定ASIN的竞品
 ```sql
 DELETE FROM product_match WHERE asin = 'B0XXXXXXX';
 ```
+<!-- 执行：python .py/delete_by_asin.py B0XXXXXXX -->
 
 ## 输出格式
 
@@ -239,20 +349,21 @@ DELETE FROM product_match WHERE asin = 'B0XXXXXXX';
 
 ## 常见对话模式
 
-| 用户说 | 识别意图 | 执行的SQL |
-|--------|----------|-----------|
-| "查看所有竞品" | 查询全部 | SELECT * FROM product_match |
-| "黑色竞品有哪些" | 按颜色筛选 | WHERE color_id = 2 |
-| "AKMOTOR品牌的价格" | 按品牌筛选 | WHERE brand_id = ? |
-| "平均价格是多少" | 聚合统计 | AVG(price) |
-| "添加一个竞品" | INSERT | INSERT INTO |
-| "更新价格" | UPDATE | UPDATE ... SET |
-| "删除这条" | DELETE | DELETE FROM |
-| "查找 B0XXXXXXX 的竞品" | ASIN识别查找竞品 | WHERE collection_id 子查询 |
-| "B0XXXXXXX 同色的竞品" | ASIN识别同色竞品 | WHERE collection_id + color_id 子查询 |
-| "SKU-XXX 的竞品有哪些" | SKU识别查找竞品 | WHERE collection_id 子查询 |
-| "按价格排序" | 变更排序 | ORDER BY price |
-| "按日期排序" | 变更排序 | ORDER BY datetime DESC |
+| 用户说 | 识别意图 | 执行的脚本 |
+|--------|----------|------------|
+| "查看所有竞品" | 查询全部 | `python .py/query_all.py` |
+| "黑色竞品有哪些" | 按颜色筛选 | `python .py/query_by_color.py BK` |
+| "AKMOTOR品牌的价格" | 按品牌筛选 | `python .py/query_by_brand.py AKMOTOR` |
+| "平均价格是多少" | 聚合统计 | `python .py/stats_by_brand.py` |
+| "添加一个竞品" | INSERT | `python .py/insert_competitor.py <args>` |
+| "添加自己的产品" | 批量添加自有产品 | `python .py/add_own_product.py` (stdin) |
+| "更新价格" | UPDATE | `python .py/update_price.py <args>` |
+| "删除这条" | DELETE | `python .py/delete_competitor.py <id>` |
+| "查找 B0XXXXXXX 的竞品" | ASIN识别查找竞品 | `python .py/query_competitors.py B0XXXXXXX` |
+| "B0XXXXXXX 同色的竞品" | ASIN识别同色竞品 | `python .py/query_same_color.py B0XXXXXXX` |
+| "SKU-XXX 的竞品有哪些" | SKU识别查找竞品 | `python .py/query_competitors.py SKU-XXX` |
+| "按价格排序" | 变更排序 | 修改 ORDER BY 子句 |
+| "按日期排序" | 变更排序 | 修改 ORDER BY 子句 |
 
 ## ASIN/SKU 识别规则
 
