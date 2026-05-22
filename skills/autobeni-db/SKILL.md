@@ -150,6 +150,35 @@ WHERE pm.price BETWEEN 25 AND 35
 ORDER BY pm.price;
 ```
 
+### 查找竞品（通过 ASIN/SKU，匹配 collection_id，默认全部颜色，按品牌+颜色排序）
+```sql
+SELECT pm.asin, b.name AS brand, c.name AS color, col.name AS collection, pm.price, pm.datetime
+FROM product_match pm
+JOIN brand b ON pm.brand_id = b.id
+JOIN color c ON pm.color_id = c.id
+JOIN collection col ON pm.collection_id = col.id
+WHERE pm.collection_id = (
+    SELECT p.collection_id FROM product p WHERE p.asin = 'B0DFCLW3N4' OR p.sku = 'SKU-XXX'
+)
+ORDER BY b.name, c.name;
+```
+
+### 查找同色竞品（通过 ASIN/SKU，匹配 collection_id + color_id，按品牌+颜色排序）
+```sql
+SELECT pm.asin, b.name AS brand, c.name AS color, col.name AS collection, pm.price, pm.datetime
+FROM product_match pm
+JOIN brand b ON pm.brand_id = b.id
+JOIN color c ON pm.color_id = c.id
+JOIN collection col ON pm.collection_id = col.id
+WHERE pm.collection_id = (
+    SELECT p.collection_id FROM product p WHERE p.asin = 'B0DFCLW3N4' OR p.sku = 'SKU-XXX'
+)
+AND pm.color_id = (
+    SELECT p.color_id FROM product p WHERE p.asin = 'B0DFCLW3N4' OR p.sku = 'SKU-XXX'
+)
+ORDER BY b.name, c.name;
+```
+
 ## 插入操作
 
 ### 添加竞品
@@ -192,12 +221,14 @@ DELETE FROM product_match WHERE asin = 'B0XXXXXXX';
 
 查询结果使用表格形式展示：
 ```
-┌────┬──────────────┬──────────┬───────┬────────┬────────────┐
-│ ID │    ASIN      │  品牌    │ 颜色  │ 价格   │   日期     │
-├────┼──────────────┼──────────┼───────┼────────┼────────────┤
-│ 2  │ B0DFCLW3N4   │ AKMOTOR  │  BK   │ 28.88  │ 2026-05-21 │
-└────┴──────────────┴──────────┴───────┴────────┴────────────┘
+┌──────────────┬──────────┬───────┬───────────┬────────┬────────────┐
+│    ASIN      │  品牌    │ 颜色  │  系列     │ 价格   │   日期     │
+├──────────────┼──────────┼───────┼───────────┼────────┼────────────┤
+│ B0DFCLW3N4   │ AKMOTOR  │  BK   │ Classic   │ 28.88  │ 2026-05-21 │
+└──────────────┴──────────┴───────┴───────────┴────────┴────────────┘
 ```
+
+竞品查询输出字段：ASIN | 品牌 | 颜色 | 系列 | 价格 | 日期
 
 ## 常见对话模式
 
@@ -210,6 +241,26 @@ DELETE FROM product_match WHERE asin = 'B0XXXXXXX';
 | "添加一个竞品" | INSERT | INSERT INTO |
 | "更新价格" | UPDATE | UPDATE ... SET |
 | "删除这条" | DELETE | DELETE FROM |
+| "查找 B0XXXXXXX 的竞品" | ASIN识别查找竞品 | WHERE collection_id 子查询 |
+| "B0XXXXXXX 同色的竞品" | ASIN识别同色竞品 | WHERE collection_id + color_id 子查询 |
+| "SKU-XXX 的竞品有哪些" | SKU识别查找竞品 | WHERE collection_id 子查询 |
+| "按价格排序" | 变更排序 | ORDER BY price |
+| "按日期排序" | 变更排序 | ORDER BY datetime DESC |
+
+## ASIN/SKU 识别规则
+
+| 格式 | 特征 | 示例 |
+|------|------|------|
+| ASIN | `B` 开头 + 10位字母数字 | `B0DFCLW3N4` |
+| SKU | 包含 `-`，较长 | `SKU-001-XXX` |
+
+## 竞品查询逻辑
+
+当用户查找竞品时，执行以下逻辑：
+1. 从 `product` 表中通过 ASIN 或 SKU 找到对应产品的 `collection_id`
+2. 用该 `collection_id` 在 `product_match` 表中查找匹配记录
+3. 默认返回全部颜色，除非用户明确指定"同色"
+4. 默认按 `brand → color` 排序，除非用户指定其他排序规则
 
 ## 注意事项
 
