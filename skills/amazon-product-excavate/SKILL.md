@@ -15,7 +15,7 @@ description: >
 
 ## 核心文件
 
-- `asin-list.txt` — 待处理 ASIN 队列，每行一个 ASIN（大写）
+- `asin-list.txt` — 待处理 ASIN 队列，每行一个条目。带 `#` 前缀的 ASIN（如 `#B0XXXXXXXX`）表示需要提取变体；不带 `#` 前缀的 ASIN（如 `B0XXXXXXXX`）表示仅需提取商品数据，不需要提取变体
 - `output.txt` — 已收集商品数据，Markdown 表格格式
 - `scripts/extract-product.js` — 商品数据提取脚本（注入浏览器执行）
 - `scripts/extract-variants.js` — 变体 ASIN 提取脚本（注入浏览器执行）
@@ -51,8 +51,8 @@ description: >
    - 匹配 `/gp/product/([A-Z0-9]{10})`
    - 匹配 `/product/([A-Z0-9]{10})`
 4. 过滤掉已存在于 `collected_asins`（来自 `output.txt`）中的 ASIN
-5. 读取 `asin-list.txt` 当前内容，过滤掉已存在于文件中的 ASIN
-6. 仅将剩余的新 ASIN 追加到 `asin-list.txt` 末尾（每行一个，大写格式）
+5. 读取 `asin-list.txt` 当前内容，提取每行的 ASIN 部分（去掉 `#` 前缀后比较），过滤掉已存在于文件中的 ASIN
+6. 将剩余的新 ASIN 追加到 `asin-list.txt` 末尾（每行一个，大写格式，**带 `#` 前缀**）。因为用户直接提供的 ASIN 是种子 ASIN，需要提取变体，所以写入时格式为 `#B0XXXXXXXX`
 
 ### Step 3: 浏览器初始化
 
@@ -86,7 +86,14 @@ description: >
 
 读取 `asin-list.txt` 的全部内容。如果文件为空或没有 ASIN，告知用户"没有待处理的 ASIN"并结束。
 
-对 `asin-list.txt` 中的每个 ASIN，按以下子步骤顺序处理。每个子步骤设有超时时间，失败时重试 1 次，仍失败则跳过该 ASIN（保留在 `asin-list.txt` 中）。
+对 `asin-list.txt` 中的每一行，按以下方式解析：
+
+- 如果行以 `#` 开头（如 `#B0XXXXXXXX`），则该 ASIN **需要提取变体**，实际 ASIN 为 `#` 后面的部分
+- 如果行不以 `#` 开头（如 `B0XXXXXXXX`），则该 ASIN **不需要提取变体**，仅提取商品数据
+
+解析后得到两个值：`asin`（实际 ASIN 字符串）和 `need_variants`（布尔值，是否需要提取变体）。
+
+对每个 ASIN，按以下子步骤顺序处理。每个子步骤设有超时时间，失败时重试 1 次，仍失败则跳过该 ASIN（保留在 `asin-list.txt` 中）。
 
 ---
 
@@ -170,6 +177,8 @@ description: >
 
 #### 4.6 提取变体 ASIN
 
+**仅在 `need_variants` 为 `true` 时执行此步骤。如果 `need_variants` 为 `false`（即 ASIN 行不以 `#` 开头），跳过此步骤和 4.7，直接进入 4.8。**
+
 **超时：10 秒 | 重试：1 次**
 
 读取脚本文件 `scripts/extract-variants.js` 的内容，然后调用 `chrome-devtools_evaluate_script` 注入执行。脚本返回结构：
@@ -204,9 +213,9 @@ description: >
 对 `candidate_asins`（4.6 的输出）进行双重过滤：
 
 1. **过滤 output.txt 中已存在的 ASIN**：检查 `collected_asins` 去重集合
-2. **过滤 asin-list.txt 中已存在的 ASIN**：读取 `asin-list.txt` 当前内容，提取所有行
+2. **过滤 asin-list.txt 中已存在的 ASIN**：读取 `asin-list.txt` 当前内容，提取每行的 ASIN 部分（去掉 `#` 前缀后比较），过滤掉已存在的 ASIN
 
-过滤后，将剩余的新 ASIN 追加到 `asin-list.txt` 末尾（每行一个，大写格式）。
+过滤后，将剩余的新 ASIN 追加到 `asin-list.txt` 末尾（每行一个，大写格式，**不带 `#` 前缀**）。因为这些变体 ASIN 不需要再递归提取变体，所以格式为 `B0XXXXXXXX`（不带 `#`）。
 
 #### 4.8 从 asin-list.txt 移除已完成的 ASIN
 
@@ -215,7 +224,7 @@ description: >
 只有当 4.1 到 4.5 全部成功时（截图失败除外），才执行此步骤：
 
 1. 读取 `asin-list.txt` 的当前内容
-2. 移除当前处理的 ASIN 行
+2. 移除当前处理的 ASIN 行（需要匹配完整行内容，包括 `#` 前缀）。例如当前 ASIN 行为 `#B0XXXXXXXX`，则移除 `#B0XXXXXXXX` 这一行；如果行为 `B0XXXXXXXX`，则移除 `B0XXXXXXXX` 这一行
 3. 写回文件
 
 如果中间任何步骤失败导致跳过，**不移除**该 ASIN，保留在 `asin-list.txt` 中以便下次重试。
@@ -243,7 +252,7 @@ description: >
 | 4.2 等待页面就绪 | 15s（3x5s） | — | 标记加载失败 |
 | 4.3 提取商品数据 | 15s | 1 | 跳过该 ASIN |
 | 4.4 截图保存 | 15s | 1 | 记录警告，不跳过 |
-| 4.6 提取变体 | 10s | 1 | 跳过变体，不跳过 ASIN |
+| 4.6 提取变体 | 10s | 1 | 仅 `#` 前缀时执行，跳过变体，不跳过 ASIN |
 
 ## 注意事项
 
@@ -253,3 +262,4 @@ description: >
 4. **截图时机**：截图必须在数据提取之后、页签切换之前完成，确保截图内容与提取数据一致。
 5. **Markdown 格式对齐**：每次写入 `output.txt` 时，应重新计算各列宽度并格式化整个表格，确保编辑时有良好的可读性。
 6. **页面状态依赖**：步骤 4.1-4.6 必须在同一页面上下文中连续执行，不可在中间切换到其他页签。
+7. **`#` 前缀约定**：`asin-list.txt` 中每行以 `#` 开头表示该 ASIN 需要提取变体（种子 ASIN），不以 `#` 开头表示仅需提取商品数据（发现的变体 ASIN）。这避免了变体的递归提取，大幅减少不必要的页面操作。
