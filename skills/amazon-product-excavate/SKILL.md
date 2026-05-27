@@ -42,7 +42,7 @@ description: >
 
 如果用户提供了 ASIN 或 URL 列表，执行以下逻辑。如果用户未提供（例如直接说"开始挖掘"），跳过此步骤，直接使用 `asin-list.txt` 中已有的 ASIN。
 
-**提取逻辑：**
+**提取与过滤逻辑：**
 
 1. 遍历用户提供的列表中的每一项
 2. 如果是 10 位字母数字的组合（ASIN 格式），直接提取，转换为大写
@@ -50,8 +50,9 @@ description: >
    - 匹配 `/dp/([A-Z0-9]{10})`
    - 匹配 `/gp/product/([A-Z0-9]{10})`
    - 匹配 `/product/([A-Z0-9]{10})`
-4. 将所有提取出的 ASIN 追加到 `asin-list.txt` 末尾（每行一个）
-5. 对 `asin-list.txt` 做去重：读取全部行，去除重复行，写回文件
+4. 过滤掉已存在于 `collected_asins`（来自 `output.txt`）中的 ASIN
+5. 读取 `asin-list.txt` 当前内容，过滤掉已存在于文件中的 ASIN
+6. 仅将剩余的新 ASIN 追加到 `asin-list.txt` 末尾（每行一个，大写格式）
 
 ### Step 3: 浏览器初始化
 
